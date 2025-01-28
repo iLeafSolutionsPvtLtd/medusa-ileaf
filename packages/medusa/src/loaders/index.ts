@@ -28,6 +28,7 @@ import { v4 } from "uuid"
 import adminLoader from "./admin"
 import apiLoader from "./api"
 import { getResolvedPlugins } from "./helpers/resolve-plugins"
+import { Server } from "socket.io"
 
 type Options = {
   directory: string
@@ -173,6 +174,30 @@ export default async ({
     expressApp,
     rootDirectory
   )
+  const server = expressApp.listen(9000, () => {
+    console.log(`Server is running on port ${9000}`)
+  })
+
+  const io = new Server(server, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"],
+    },
+  })
+  expressApp.locals.io = io
+
+  io.on("connection", (socket) => {
+    console.log(`New client connected: ${socket.id}`)
+
+    socket.on("custom_event", (data) => {
+      console.log(`Received custom_event with data: ${data}`)
+      socket.emit("response_event", { message: "Event received!" })
+    })
+
+    socket.on("disconnect", () => {
+      console.log(`Client disconnected: ${socket.id}`)
+    })
+  })
 
   const { createDefaultsWorkflow } = await import("@medusajs/core-flows")
   await createDefaultsWorkflow(container).run()
@@ -192,6 +217,8 @@ export default async ({
       pgConnection?.context?.destroy(),
       entrypointsShutdown(),
     ])
+    io.close()
+    server.close()
   }
 
   return {
